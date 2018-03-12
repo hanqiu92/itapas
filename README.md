@@ -2,7 +2,7 @@ A Python implementation of iTAPAS algorithm for static traffic assignment
 =========================================
 
 iTAPAS (improved traffic assignment by paired
-alternative segments) algorithm [1,2] is an efficient algorithm for static traffic assignment especially in very large network. Here we provide a simple python implementation which can be readily used as a building block for researches in transportation that requires static traffic assignment.
+alternative segments) algorithm [1,2] is an efficient algorithm for static traffic assignment especially in very large network. Here we provide a simple python implementation which can be readily used as a building block for research in transportation that requires static traffic assignment.
 
 Requirement
 -----------
