@@ -6,7 +6,7 @@ alternative segments) algorithm [1,2] is an efficient algorithm for static traff
 
 Requirement
 -----------
-Python 2.7 + NumPy
+Python 3.7 + NumPy
 
 Graph-tool: https://graph-tool.skewed.de/
 

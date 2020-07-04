@@ -1,7 +1,7 @@
 import numpy as np
 import time
 import sys
-sys.path.append('/usr/local/lib/python2.7/site-packages')
+sys.path.append('/usr/local/lib/python3.7/site-packages')
 import graph_tool.all as gt
 
 class ITAPAS(object):
@@ -20,12 +20,16 @@ class ITAPAS(object):
         self.link_background = link_background
         self.link_cost_func = link_cost_func
 
-        # get the edge list sorted for fast manipulation of edge properties
+        # get the edge list sorted for correct manipulation of edge properties:
+        # the edge list order should be the same as the edge properties order 
         edge_list = np.array(network.get_edges(),dtype=np.int32)
-        ind = np.argsort(edge_list[:,2])
-        edge_list = edge_list[ind,:]
+        sort_idxs = -np.ones((len(edge_list),),dtype=np.int32)
+        for i in range(len(edge_list)):
+            curr_edge_idx = network.edge_index[network.edge(edge_list[i,0],edge_list[i,1])]
+            sort_idxs[curr_edge_idx] = i
+        edge_list = edge_list[sort_idxs,:]
         edge_index = {}
-        for i in xrange(edge_list.shape[0]):
+        for i in range(edge_list.shape[0]):
             edge_index[(edge_list[i,0],edge_list[i,1])] = i
 
         self.edge_list = edge_list
@@ -35,8 +39,8 @@ class ITAPAS(object):
             # use the list of all nodes
             ori_list = list(self.network.get_vertices())
         ori_index = {}
-        for idx,key in enumerate(ori_list):
-            ori_index[key] = idx
+        for idx,node in enumerate(ori_list):
+            ori_index[node] = idx
         self.ori_index = ori_index
 
     def MFS(self,flow_map,local_flow_map,cost_map,cost_de_map,
@@ -69,12 +73,12 @@ class ITAPAS(object):
                 status_map[v] = -1
             status_map[j] = 1
             status_map[i] = 1
-
+            
             inner_flag = True
             while inner_flag:
                 # step 2: find max incoming edge
                 m_list = [int(m) for m in network.vertex(i).in_neighbours()]
-                f_list = [local_flow_map[(m,i)] for m in m_list]
+                f_list = [local_flow_map.a[edge_index.get((m,i))] for m in m_list]
                 m = m_list[np.argmax(f_list)]
                 # if debug_flag:
                 #     print i,m_list,f_list,status_map[m]
@@ -99,13 +103,14 @@ class ITAPAS(object):
                         curr_m = prev_m
                         prev_m = prev_new_map[curr_m]
 
+                    e_list = np.array(e_list)
                     delta = np.min(local_flow_map.a[e_list])
                     local_flow_map.a[e_list] -= delta
                     flow_map.a[e_list] -= delta
                     _,cost_map.a[e_list],cost_de_map.a[e_list] = link_cost_func(flow_map.a[e_list] + \
                                                                                   link_background.a[e_list],
                                                                               [p.a[e_list] for p in param_map])
-                    if local_flow_map[e0] < epsilon:
+                    if local_flow_map.a[edge_index.get(e0)] < epsilon:
                         return None
                     inner_flag = False
                     # if debug_flag:
@@ -151,7 +156,7 @@ class ITAPAS(object):
         dual = 0.0
         for ori in self.ori_index.keys():
             d_map = gt.shortest_distance(network, source=network.vertex(ori), weights=link_cost, max_dist=100000)
-            for key,value in demand.iteritems():
+            for key,value in demand.items():
                 if key[0] == ori:
                     dual += value * d_map[key[1]]
         dg = primal - dual
@@ -200,7 +205,7 @@ class ITAPAS(object):
             for ori in ori_index.keys():
                 _,subnet[ori] = gt.shortest_distance(network, source=network.vertex(ori), weights=link_cost,
                                                      max_dist=100000, pred_map=True)
-            for key,value in demand.iteritems():
+            for key,value in demand.items():
                 _,e_list = gt.shortest_path(network, source=network.vertex(key[0]), target=network.vertex(key[1]),
                                             pred_map=subnet[key[0]])
                 e_list = [edge_index.get(tuple(e)) for e in e_list]
@@ -215,7 +220,7 @@ class ITAPAS(object):
                                                [p.a for p in self.link_param])
         dg = self.get_duality_gap(link_flow,link_cost,demand)
         if out_flag:
-            print 'ITAPAS: Initial duality gap = {:.0f}.  Elapsed time = {:.2f}.'.format(dg,time.time() - t)
+            print('ITAPAS: Initial duality gap = {:.0f}.  Elapsed time = {:.2f}.'.format(dg,time.time() - t))
         if dg < dg_limit:
             return link_flow,link_flow_node
 
@@ -249,7 +254,7 @@ class ITAPAS(object):
                 while link_set:
                     # identify pas
                     e = link_set.pop()
-                    if local_link_flow[e] > epsilon:
+                    if local_link_flow.a[edge_index.get((e[0],e[1]))] > epsilon:
                         pas = self.MFS(link_flow,local_link_flow,link_cost,link_cost_de,
                                        prev_map,ori,e,epsilon)
                         if pas:
@@ -258,7 +263,7 @@ class ITAPAS(object):
                                 pas_set_node[e[1]][pas] = ori
 
                 if pas_set:
-                    pas_list = pas_set.keys()
+                    pas_list = list(pas_set.keys())
                     if len(pas_list) > 100:
                         pas_list_select = [pas_list[idx] for idx in np.random.choice(len(pas_list),100,replace=False)]
                     else:
@@ -267,8 +272,8 @@ class ITAPAS(object):
                         self.shift(link_flow,link_flow_node[pas_set.get(pas)],
                                   link_cost,link_cost_de,pas,epsilon,mu,True)
 
-            for _ in xrange(20):
-                pas_list = pas_set.keys()
+            for _ in range(20):
+                pas_list = list(pas_set.keys())
                 for pas in pas_list:
                     if not self.shift(link_flow,link_flow_node[pas_set.get(pas)],
                                       link_cost,link_cost_de,pas,epsilon,mu,False):
@@ -278,7 +283,7 @@ class ITAPAS(object):
                                                [p.a for p in self.link_param])
             dg = self.get_duality_gap(link_flow,link_cost,demand)
             if out_flag:
-                print 'ITAPAS: Iteration {} finished. PAS size = {}. Duality gap = {:.0f}. Elapsed time = {:.2f}.'.format(curr_iter,len(pas_set),dg,time.time() - t)
+                print('ITAPAS: Iteration {} finished. PAS size = {}. Duality gap = {:.0f}. Elapsed time = {:.2f}.'.format(curr_iter,len(pas_set),dg,time.time() - t))
             curr_iter += 1
             if (dg < dg_limit) or (curr_iter > max_iter) or (time.time() - t > time_limit):
                 return link_flow,link_flow_node
